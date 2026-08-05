@@ -43,6 +43,10 @@ svg{display:block;width:100%;background:#0c111a;border-radius:8px}
 .legend{font-size:11.5px;color:var(--tx3);margin-top:8px}
 footer{margin-top:28px;font-size:12px;color:var(--tx3);border-top:1px solid var(--bd);padding-top:14px}
 .err{color:var(--neg);padding:20px}
+.tabs{display:flex;gap:8px;margin:0 0 18px;flex-wrap:wrap}
+.tabs button{background:var(--s1);color:var(--tx2);border:1px solid var(--bd);border-radius:20px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.tabs button.on{background:rgba(0,255,136,.12);color:var(--acc);border-color:var(--bd2)}
+.warn{background:rgba(255,107,107,.08);border-left:3px solid var(--neg)}
 </style>
 </head>
 <body>
@@ -51,15 +55,14 @@ footer{margin-top:28px;font-size:12px;color:var(--tx3);border-top:1px solid var(
   <h1><span class="g">EdgeFlow</span> Lab</h1>
   <div class="meta" id="meta"></div>
 </header>
+<div class="tabs" id="tabs"></div>
 <div class="sub" id="submeta"></div>
 <div class="headline" id="headline"></div>
 <div class="grid">
   <div class="card"><h3>The target</h3><div class="kpis" id="targetkpis"></div><div class="legend" id="targetnote"></div></div>
   <div class="card"><h3>Findings</h3><ul class="findings" id="findings"></ul></div>
 </div>
-<div class="tablewrap"><table id="tbl"><thead><tr>
-  <th>Config</th><th>Trades</th><th>Win %</th><th>PF</th><th>Exp R</th><th>Final $</th><th>CAGR</th><th>Max DD</th><th>Months +</th>
-</tr></thead><tbody id="rows"></tbody></table></div>
+<div class="tablewrap"><table id="tbl"><thead id="thead"></thead><tbody id="rows"></tbody></table></div>
 <div class="chartcard">
   <div class="hd"><div class="name" id="cname"></div><div class="cfg" id="ccfg"></div></div>
   <svg id="eq" viewBox="0 0 960 300" preserveAspectRatio="none"></svg>
@@ -72,42 +75,61 @@ footer{margin-top:28px;font-size:12px;color:var(--tx3);border-top:1px solid var(
 <script>
 const fmt=(n,d=0)=>{if(n===99)return'∞';return Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
 const money=n=>'$'+fmt(n);
-fetch('data.json?'+Date.now()).then(r=>r.json()).then(render).catch(e=>{document.querySelector('.wrap').insertAdjacentHTML('beforeend','<div class=err>Could not load data.json: '+e+'</div>');});
+let DATA=null;
+fetch('data.json?'+Date.now()).then(r=>r.json()).then(d=>{DATA=d;boot();}).catch(e=>{document.querySelector('.wrap').insertAdjacentHTML('beforeend','<div class=err>Could not load data.json: '+e+'</div>');});
 
-function render(data){
-  const c=data.campaigns[0];
-  document.getElementById('meta').textContent='updated '+data.generated;
+function boot(){
+  document.getElementById('meta').textContent='updated '+DATA.generated;
+  const tabs=document.getElementById('tabs');
+  DATA.campaigns.forEach((c,i)=>{const b=document.createElement('button');b.textContent=c.title;b.onclick=()=>renderCampaign(i);tabs.appendChild(b);});
+  document.getElementById('foot').innerHTML='Master detector <code>detect.js</code> is held constant across every trial — only the execution changes. Re-run <code>campaign.js</code> to refresh this page. &nbsp;·&nbsp; EdgeFlow Lab · '+DATA.generated;
+  renderCampaign(0);
+}
+
+function renderCampaign(ci){
+  const c=DATA.campaigns[ci];const scaling=c.kind==='scaling';
+  document.querySelectorAll('#tabs button').forEach((b,i)=>b.classList.toggle('on',i===ci));
   document.getElementById('submeta').innerHTML=c.title+' &nbsp;·&nbsp; '+c.span+' &nbsp;·&nbsp; '+Number(c.bars).toLocaleString()+' 1-min bars<br>'+c.dataset;
   document.getElementById('headline').innerHTML='<b>'+c.headline+'</b>';
   document.getElementById('findings').innerHTML=c.findings.map(f=>'<li>'+f+'</li>').join('');
-  const tgt=c.trials.find(t=>t.tag==='target')||c.trials[0];
-  document.getElementById('targetkpis').innerHTML=[
-    ['PF',fmt(tgt.pf,2),tgt.pf>=1?'pos':'neg'],['Win',tgt.win+'%',tgt.win>=50?'pos':''],
-    ['Months +',tgt.monthsGreen+'/'+tgt.monthsTotal,''],['Max DD',tgt.dd+'%','neg']
-  ].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
-  document.getElementById('targetnote').textContent='"'+tgt.label+'" — the same master signals entered on time, spread included. This is the number the 1m executor must recover.';
 
-  const rows=document.getElementById('rows');
-  c.trials.forEach((t,i)=>{
-    const tr=document.createElement('tr');tr.dataset.i=i;
-    tr.innerHTML='<td>'+t.label+' <span class="tag '+t.tag+'">'+t.tag+'</span></td>'
+  // highlight card
+  let hi;
+  if(scaling){hi=c.trials.find(t=>t.riskPct===2)||c.trials[0];
+    document.getElementById('targetkpis').innerHTML=[['Final $',money(hi.finalBal),'pos'],['Max DD',hi.dd+'%','neg'],['Lot-capped',hi.capPct+'%',''],['Risk/trade',hi.riskPct+'%','']].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
+    document.getElementById('targetnote').innerHTML='Sweet spot ≈ 2–5% risk. Beyond that the 100-lot cap kills the extra upside while drawdown races toward ruin. <b>Rides on the TARGET config — assumes the 1m executor is live.</b>';
+  }else{hi=c.trials.find(t=>t.tag==='target')||c.trials[0];
+    document.getElementById('targetkpis').innerHTML=[['PF',fmt(hi.pf,2),hi.pf>=1?'pos':'neg'],['Win',hi.win+'%',hi.win>=50?'pos':''],['Months +',hi.monthsGreen+'/'+hi.monthsTotal,''],['Max DD',hi.dd+'%','neg']].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
+    document.getElementById('targetnote').textContent='"'+hi.label+'" — the same master signals entered on time, spread included. The number the 1m executor must recover.';
+  }
+
+  // table
+  const heads=scaling?['Config','Trades','Final $','Max DD','Lot-capped','Months +']:['Config','Trades','Win %','PF','Exp R','Final $','CAGR','Max DD','Months +'];
+  document.getElementById('thead').innerHTML='<tr>'+heads.map((h,i)=>'<th'+(i?'':'')+'>'+h+'</th>').join('')+'</tr>';
+  const rows=document.getElementById('rows');rows.innerHTML='';
+  c.trials.forEach((t,i)=>{const tr=document.createElement('tr');tr.dataset.i=i;
+    const ddcls=t.dd>=85?'neg':(t.dd>=50?'neg':'');
+    if(scaling){tr.innerHTML='<td>'+t.label+' <span class="tag '+t.tag+'">'+t.tag+'</span></td>'
+      +'<td class="dim">'+t.trades+'</td>'
+      +'<td class="'+(t.finalBal>=1000?'pos':'neg')+'"><b>'+money(t.finalBal)+'</b></td>'
+      +'<td class="'+ddcls+'">'+t.dd+'%'+(t.busted?' 💀':'')+'</td>'
+      +'<td class="dim">'+t.capPct+'%</td><td>'+t.monthsGreen+'/'+t.monthsTotal+'</td>';
+    }else{tr.innerHTML='<td>'+t.label+' <span class="tag '+t.tag+'">'+t.tag+'</span></td>'
       +'<td class="dim">'+t.trades+'</td><td>'+t.win+'%</td>'
       +'<td class="'+(t.pf>=1?'pos':'neg')+'"><b>'+fmt(t.pf,2)+'</b></td>'
       +'<td class="'+(t.expR>=0?'pos':'neg')+'">'+fmt(t.expR,2)+'</td>'
       +'<td class="'+(t.finalBal>=1000?'pos':'neg')+'">'+money(t.finalBal)+'</td>'
       +'<td class="'+(t.cagr>=0?'pos':'neg')+'">'+fmt(t.cagr)+'%</td>'
-      +'<td class="neg">'+t.dd+'%</td><td>'+t.monthsGreen+'/'+t.monthsTotal+'</td>';
-    tr.onclick=()=>select(c,i);rows.appendChild(tr);
-  });
-  document.getElementById('foot').innerHTML='Master detector <code>detect.js</code> is held constant across every trial — only the execution (entry timing, exit rule, cost) changes. Re-run <code>campaign.js</code> to refresh this page. &nbsp;·&nbsp; EdgeFlow Lab · '+data.generated;
-  select(c, c.trials.indexOf(tgt));
+      +'<td class="neg">'+t.dd+'%</td><td>'+t.monthsGreen+'/'+t.monthsTotal+'</td>';}
+    tr.onclick=()=>select(c,i);rows.appendChild(tr);});
+  select(c,c.trials.indexOf(hi));
 }
 
 function select(c,i){
   document.querySelectorAll('#rows tr').forEach(r=>r.classList.toggle('sel',+r.dataset.i===i));
-  const t=c.trials[i];
+  const t=c.trials[i];const scaling=c.kind==='scaling';
   document.getElementById('cname').innerHTML=t.label+' <span class="tag '+t.tag+'">'+t.tag+'</span>';
-  document.getElementById('ccfg').textContent='entry: '+t.entry+'  ·  exit: '+t.exit+'  ·  cost: '+t.cost+'p  ·  '+t.trades+' trades  ·  PF '+fmt(t.pf,2);
+  document.getElementById('ccfg').textContent=scaling?('risk '+t.riskPct+'%/trade · 100-lot cap · '+t.trades+' trades · final '+money(t.finalBal)+' · DD '+t.dd+'%'):('entry: '+t.entry+'  ·  exit: '+t.exit+'  ·  cost: '+t.cost+'p  ·  '+t.trades+' trades  ·  PF '+fmt(t.pf,2));
   drawEq(t);drawMon(t);
 }
 
