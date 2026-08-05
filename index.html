@@ -47,6 +47,23 @@ footer{margin-top:28px;font-size:12px;color:var(--tx3);border-top:1px solid var(
 .tabs button{background:var(--s1);color:var(--tx2);border:1px solid var(--bd);border-radius:20px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 .tabs button.on{background:rgba(0,255,136,.12);color:var(--acc);border-color:var(--bd2)}
 .warn{background:rgba(255,107,107,.08);border-left:3px solid var(--neg)}
+.mech{margin:0;padding:0;list-style:none;counter-reset:m}
+.mech li{position:relative;padding:8px 0 8px 34px;font-size:13.5px;border-bottom:1px solid var(--bd);counter-increment:m}
+.mech li:last-child{border-bottom:none}.mech li::before{content:counter(m);position:absolute;left:0;top:7px;width:22px;height:22px;border-radius:50%;background:rgba(0,255,136,.14);color:var(--acc);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center}
+.mech b{color:var(--tx)}
+.bars3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}@media(max-width:720px){.bars3{grid-template-columns:1fr}}
+.brow{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12.5px}
+.brow .nm{width:66px;color:var(--tx2);flex-shrink:0}.brow .bar{height:16px;border-radius:3px;min-width:2px}.brow .vl{color:var(--tx2);font-variant-numeric:tabular-nums}
+.flt{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 10px}
+.flt button{background:var(--s1);color:var(--tx2);border:1px solid var(--bd);border-radius:16px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+.flt button.on{background:rgba(0,255,136,.12);color:var(--acc);border-color:var(--bd2)}
+.tlog{max-height:460px;overflow-y:auto;border:1px solid var(--bd);border-radius:10px}
+.tlog table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.tlog th{position:sticky;top:0;background:var(--s2);color:var(--tx3);font-size:11px;text-transform:uppercase;padding:7px 9px;text-align:right;z-index:1}
+.tlog td{padding:6px 9px;text-align:right;border-bottom:1px solid var(--bd)}
+.tlog td:first-child,.tlog th:first-child,.tlog td.l,.tlog th.l{text-align:left}
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:700}
+.pill.LONG{background:rgba(61,220,132,.15);color:var(--pos)}.pill.SHORT{background:rgba(255,107,107,.15);color:var(--neg)}
 </style>
 </head>
 <body>
@@ -70,6 +87,7 @@ footer{margin-top:28px;font-size:12px;color:var(--tx3);border-top:1px solid var(
   <svg id="mon" viewBox="0 0 960 120" style="margin-top:10px"></svg>
   <div class="legend">Monthly net R — green = winning month.</div>
 </div>
+<div id="detail" style="display:none"></div>
 <footer id="foot"></footer>
 </div>
 <script>
@@ -91,6 +109,10 @@ function renderCampaign(ci){
   document.querySelectorAll('#tabs button').forEach((b,i)=>b.classList.toggle('on',i===ci));
   document.getElementById('submeta').innerHTML=c.title+' &nbsp;·&nbsp; '+c.span+' &nbsp;·&nbsp; '+Number(c.bars).toLocaleString()+' 1-min bars<br>'+c.dataset;
   document.getElementById('headline').innerHTML='<b>'+c.headline+'</b>';
+  const detail=c.kind==='detail';
+  ['.grid','.tablewrap','.chartcard'].forEach(s=>{const el=document.querySelector(s);if(el)el.style.display=detail?'none':'';});
+  document.getElementById('detail').style.display=detail?'':'none';
+  if(detail){renderDetail(c);return;}
   document.getElementById('findings').innerHTML=c.findings.map(f=>'<li>'+f+'</li>').join('');
 
   // highlight card
@@ -150,6 +172,31 @@ function drawMon(t){
   let s='<line x1="20" y1="'+(H/2)+'" x2="'+(W-10)+'" y2="'+(H/2)+'" stroke="#33404f"/>';
   m.forEach((x,i)=>{const px=24+i*((W-40)/m.length);const h=Math.abs(x.r)/mx*(H/2-8);const yy=x.r>=0?H/2-h:H/2;s+='<rect x="'+px.toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1" fill="'+(x.r>=0?'#3ddc84':'#ff6b6b')+'"><title>'+x.m+': '+x.r+'R</title></rect>';});
   svg.innerHTML=s;
+}
+const COLP={'EUR/USD':'#5b8def','USD/JPY':'#00ff88','XAU/USD':'#ffd166'};
+function bar(nm,val,max,color,label){return '<div class="brow"><span class="nm">'+nm+'</span><span class="bar" style="width:'+Math.max(2,val/max*150).toFixed(0)+'px;background:'+color+'"></span><span class="vl">'+label+'</span></div>';}
+function renderDetail(c){
+  const el=document.getElementById('detail');
+  const maxT=Math.max(...c.perPair.map(p=>p.trades));
+  const tradesBars=c.perPair.map(p=>bar(p.pair,p.trades,maxT,COLP[p.pair]||'#8ab4ff',p.trades+' ('+p.longs+'L / '+p.shorts+'S)')).join('');
+  const winBars=c.perPair.map(p=>bar(p.pair,p.win,100,p.win>=50?'#3ddc84':'#ff8f5a',p.win+'%  ('+p.wins+'W/'+p.losses+'L)')).join('');
+  const reas=Object.entries(c.exitReasons).sort((a,b)=>b[1]-a[1]);const maxR=Math.max(...reas.map(r=>r[1]));
+  const reasBars=reas.map(function(e){return bar(e[0],e[1],maxR,'#a55eea',e[1]+' ('+Math.round(e[1]/c.tradeLog.length*100)+'%)');}).join('');
+  el.innerHTML=
+    '<div class="card"><h3>How a signal is made — one mechanism (backtest = live)</h3><ol class="mech">'+c.mechanism.map(function(m){var i=m.indexOf(':');return '<li>'+(i>0?'<b>'+m.slice(0,i)+'</b>'+m.slice(i):m)+'</li>';}).join('')+'</ol></div>'
+    +'<div class="bars3"><div class="card"><h3>Trades per pair</h3>'+tradesBars+'</div><div class="card"><h3>Win rate per pair</h3>'+winBars+'</div><div class="card"><h3>Exit reasons</h3>'+reasBars+'</div></div>'
+    +'<div class="card"><h3>Trade log — '+c.tradeLog.length+' trades</h3><div class="flt" id="flt"></div>'
+    +'<div class="tlog"><table><thead><tr><th class="l">Time (UTC)</th><th class="l">Pair</th><th class="l">Dir</th><th>Entry</th><th>Exit</th><th>R</th><th>Result</th><th class="l">Exit</th></tr></thead><tbody id="tlogbody"></tbody></table></div></div>';
+  const filters=[['All',function(){return true;}],['EUR/USD',function(t){return t.pair==='EUR/USD';}],['USD/JPY',function(t){return t.pair==='USD/JPY';}],['XAU/USD',function(t){return t.pair==='XAU/USD';}],['Wins',function(t){return t.win;}],['Losses',function(t){return !t.win;}]];
+  const fltEl=document.getElementById('flt');
+  filters.forEach(function(f,i){const b=document.createElement('button');b.textContent=f[0];if(i===0)b.classList.add('on');b.onclick=function(){document.querySelectorAll('#flt button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');fillLog(c,f[1]);};fltEl.appendChild(b);});
+  fillLog(c,function(){return true;});
+}
+function fillLog(c,pred){
+  const rows=c.tradeLog.filter(pred).slice().reverse();
+  const body=document.getElementById('tlogbody');
+  body.innerHTML=rows.slice(0,600).map(function(t){return '<tr><td class="l dim">'+t.t+'</td><td class="l">'+t.pair+'</td><td class="l"><span class="pill '+t.dir+'">'+t.dir+'</span></td><td>'+t.entry+'</td><td>'+t.exit+'</td><td class="'+(t.R>=0?'pos':'neg')+'">'+(t.R>=0?'+':'')+t.R+'R</td><td class="'+(t.win?'pos':'neg')+'">'+(t.win?'WIN':'loss')+'</td><td class="l dim">'+t.reason+'</td></tr>';}).join('');
+  if(rows.length>600)body.insertAdjacentHTML('beforeend','<tr><td colspan="8" class="l dim" style="padding:10px">… showing newest 600 of '+rows.length+' (filter to narrow)</td></tr>');
 }
 </script>
 </body>
