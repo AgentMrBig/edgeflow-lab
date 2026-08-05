@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EdgeFlow Lab — USD/JPY signal engine</title>
+<style>
+:root{--bg:#0a0d13;--s1:#10151e;--s2:#161c27;--bd:#1e2634;--bd2:#2a3444;--tx:#e4eaf1;--tx2:#93a1b3;--tx3:#5c6b7d;--acc:#00ff88;--pos:#3ddc84;--neg:#ff6b6b;--blue:#5b8def;--purple:#a55eea;--gold:#ffd166}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;margin:0;padding:0;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 20px 60px}
+header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--bd);padding-bottom:14px;margin-bottom:20px}
+h1{font-size:22px;margin:0;letter-spacing:-.2px}h1 .g{color:var(--acc)}
+.meta{font-size:12px;color:var(--tx3)}
+.sub{font-size:13px;color:var(--tx2);margin:-8px 0 22px}
+.headline{background:linear-gradient(90deg,rgba(0,255,136,.08),transparent);border:1px solid var(--bd2);border-left:3px solid var(--acc);border-radius:10px;padding:14px 18px;margin-bottom:22px;font-size:15px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:16px 18px}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx2);margin:0 0 12px;font-weight:600}
+.kpis{display:flex;flex-wrap:wrap;gap:18px}
+.kpi .v{font-size:26px;font-weight:700;line-height:1}.kpi .l{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px}
+.findings{margin:0;padding:0;list-style:none;font-size:13.5px}
+.findings li{padding:7px 0 7px 22px;position:relative;border-bottom:1px solid var(--bd)}
+.findings li:last-child{border-bottom:none}.findings li::before{content:"▸";position:absolute;left:2px;color:var(--acc)}
+.tablewrap{overflow-x:auto;background:var(--s1);border:1px solid var(--bd);border-radius:12px;margin-bottom:22px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;min-width:640px}
+th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{color:var(--tx3);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--s2)}
+td:first-child,th:first-child{text-align:left}
+tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:var(--s2)}
+tbody tr.sel{background:rgba(0,255,136,.09);box-shadow:inset 3px 0 0 var(--acc)}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle;margin-left:6px}
+.tag.honest{background:rgba(91,141,239,.16);color:var(--blue)}
+.tag.reference{background:rgba(147,161,179,.16);color:var(--tx2)}
+.tag.target{background:rgba(0,255,136,.16);color:var(--acc)}
+.tag.ceiling{background:rgba(165,94,234,.16);color:var(--purple)}
+.pos{color:var(--pos)}.neg{color:var(--neg)}.dim{color:var(--tx3)}
+.chartcard{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:16px 18px}
+.chartcard .hd{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chartcard .hd .name{font-weight:700;font-size:15px}.chartcard .hd .cfg{font-size:12px;color:var(--tx3)}
+svg{display:block;width:100%;background:#0c111a;border-radius:8px}
+.legend{font-size:11.5px;color:var(--tx3);margin-top:8px}
+footer{margin-top:28px;font-size:12px;color:var(--tx3);border-top:1px solid var(--bd);padding-top:14px}
+.err{color:var(--neg);padding:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1><span class="g">EdgeFlow</span> Lab</h1>
+  <div class="meta" id="meta"></div>
+</header>
+<div class="sub" id="submeta"></div>
+<div class="headline" id="headline"></div>
+<div class="grid">
+  <div class="card"><h3>The target</h3><div class="kpis" id="targetkpis"></div><div class="legend" id="targetnote"></div></div>
+  <div class="card"><h3>Findings</h3><ul class="findings" id="findings"></ul></div>
+</div>
+<div class="tablewrap"><table id="tbl"><thead><tr>
+  <th>Config</th><th>Trades</th><th>Win %</th><th>PF</th><th>Exp R</th><th>Final $</th><th>CAGR</th><th>Max DD</th><th>Months +</th>
+</tr></thead><tbody id="rows"></tbody></table></div>
+<div class="chartcard">
+  <div class="hd"><div class="name" id="cname"></div><div class="cfg" id="ccfg"></div></div>
+  <svg id="eq" viewBox="0 0 960 300" preserveAspectRatio="none"></svg>
+  <div class="legend">Equity, log scale · $1,000 start · click any row above to inspect it.</div>
+  <svg id="mon" viewBox="0 0 960 120" style="margin-top:10px"></svg>
+  <div class="legend">Monthly net R — green = winning month.</div>
+</div>
+<footer id="foot"></footer>
+</div>
+<script>
+const fmt=(n,d=0)=>{if(n===99)return'∞';return Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+const money=n=>'$'+fmt(n);
+fetch('data.json?'+Date.now()).then(r=>r.json()).then(render).catch(e=>{document.querySelector('.wrap').insertAdjacentHTML('beforeend','<div class=err>Could not load data.json: '+e+'</div>');});
+
+function render(data){
+  const c=data.campaigns[0];
+  document.getElementById('meta').textContent='updated '+data.generated;
+  document.getElementById('submeta').innerHTML=c.title+' &nbsp;·&nbsp; '+c.span+' &nbsp;·&nbsp; '+Number(c.bars).toLocaleString()+' 1-min bars<br>'+c.dataset;
+  document.getElementById('headline').innerHTML='<b>'+c.headline+'</b>';
+  document.getElementById('findings').innerHTML=c.findings.map(f=>'<li>'+f+'</li>').join('');
+  const tgt=c.trials.find(t=>t.tag==='target')||c.trials[0];
+  document.getElementById('targetkpis').innerHTML=[
+    ['PF',fmt(tgt.pf,2),tgt.pf>=1?'pos':'neg'],['Win',tgt.win+'%',tgt.win>=50?'pos':''],
+    ['Months +',tgt.monthsGreen+'/'+tgt.monthsTotal,''],['Max DD',tgt.dd+'%','neg']
+  ].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
+  document.getElementById('targetnote').textContent='"'+tgt.label+'" — the same master signals entered on time, spread included. This is the number the 1m executor must recover.';
+
+  const rows=document.getElementById('rows');
+  c.trials.forEach((t,i)=>{
+    const tr=document.createElement('tr');tr.dataset.i=i;
+    tr.innerHTML='<td>'+t.label+' <span class="tag '+t.tag+'">'+t.tag+'</span></td>'
+      +'<td class="dim">'+t.trades+'</td><td>'+t.win+'%</td>'
+      +'<td class="'+(t.pf>=1?'pos':'neg')+'"><b>'+fmt(t.pf,2)+'</b></td>'
+      +'<td class="'+(t.expR>=0?'pos':'neg')+'">'+fmt(t.expR,2)+'</td>'
+      +'<td class="'+(t.finalBal>=1000?'pos':'neg')+'">'+money(t.finalBal)+'</td>'
+      +'<td class="'+(t.cagr>=0?'pos':'neg')+'">'+fmt(t.cagr)+'%</td>'
+      +'<td class="neg">'+t.dd+'%</td><td>'+t.monthsGreen+'/'+t.monthsTotal+'</td>';
+    tr.onclick=()=>select(c,i);rows.appendChild(tr);
+  });
+  document.getElementById('foot').innerHTML='Master detector <code>detect.js</code> is held constant across every trial — only the execution (entry timing, exit rule, cost) changes. Re-run <code>campaign.js</code> to refresh this page. &nbsp;·&nbsp; EdgeFlow Lab · '+data.generated;
+  select(c, c.trials.indexOf(tgt));
+}
+
+function select(c,i){
+  document.querySelectorAll('#rows tr').forEach(r=>r.classList.toggle('sel',+r.dataset.i===i));
+  const t=c.trials[i];
+  document.getElementById('cname').innerHTML=t.label+' <span class="tag '+t.tag+'">'+t.tag+'</span>';
+  document.getElementById('ccfg').textContent='entry: '+t.entry+'  ·  exit: '+t.exit+'  ·  cost: '+t.cost+'p  ·  '+t.trades+' trades  ·  PF '+fmt(t.pf,2);
+  drawEq(t);drawMon(t);
+}
+
+function drawEq(t){
+  const W=960,H=300,P=44,d=t.equity;const svg=document.getElementById('eq');
+  const mn=Math.min(1000,...d),mx=Math.max(...d);const lo=Math.log(Math.max(1,mn)),hi=Math.log(mx);
+  const x=i=>P+i/(d.length-1||1)*(W-2*P),y=v=>H-P-((Math.log(Math.max(1,v))-lo)/(hi-lo||1))*(H-2*P);
+  const path=d.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+  const y1k=y(1000);
+  let g='';for(const gv of [mn,1000,mx]){const gy=y(gv).toFixed(1);g+='<line x1="'+P+'" y1="'+gy+'" x2="'+(W-P)+'" y2="'+gy+'" stroke="#1a2230"/><text x="6" y="'+(+gy+4)+'" fill="#5c6b7d" font-size="11">$'+fmt(gv)+'</text>';}
+  const col=t.finalBal>=1000?'#00ff88':'#ff6b6b';
+  svg.innerHTML=g+'<line x1="'+P+'" y1="'+y1k.toFixed(1)+'" x2="'+(W-P)+'" y2="'+y1k.toFixed(1)+'" stroke="#33404f" stroke-dasharray="4 4"/>'
+    +'<path d="'+path+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
+}
+function drawMon(t){
+  const W=960,H=120,m=t.monthly;const svg=document.getElementById('mon');
+  const mx=Math.max(1,...m.map(x=>Math.abs(x.r)));const bw=Math.max(4,Math.min(26,(W-40)/m.length-3));
+  let s='<line x1="20" y1="'+(H/2)+'" x2="'+(W-10)+'" y2="'+(H/2)+'" stroke="#33404f"/>';
+  m.forEach((x,i)=>{const px=24+i*((W-40)/m.length);const h=Math.abs(x.r)/mx*(H/2-8);const yy=x.r>=0?H/2-h:H/2;s+='<rect x="'+px.toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1" fill="'+(x.r>=0?'#3ddc84':'#ff6b6b')+'"><title>'+x.m+': '+x.r+'R</title></rect>';});
+  svg.innerHTML=s;
+}
+</script>
+</body>
+</html>
