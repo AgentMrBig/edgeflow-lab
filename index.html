@@ -117,9 +117,10 @@ function renderCampaign(ci){
 
   // highlight card
   let hi;
-  if(scaling){hi=c.trials.find(t=>t.riskPct===5)||c.trials.find(t=>t.riskPct===2)||c.trials[0];
-    document.getElementById('targetkpis').innerHTML=[['Final $',money(hi.finalBal),'pos'],['Max DD',hi.dd+'%','neg'],['Lot-capped',hi.capPct+'%',''],['Risk/trade',hi.riskPct+'%','']].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
-    document.getElementById('targetnote').innerHTML='<b>5% — the chosen method.</b> Monte-Carlo validated: 0% ruin across 5,000 shuffles, ~$970k median (real/capped). The fortress dial.';
+  if(scaling){hi=c.trials.find(t=>t.tag==='target')||c.trials.find(t=>t.riskPct===5)||c.trials.find(t=>t.riskPct===2)||c.trials[0];
+    const hasRuin=hi.ruin!==undefined;
+    document.getElementById('targetkpis').innerHTML=[['Final $',money(hi.finalBal),'pos'],['Max DD',hi.dd+'%','neg'],[hasRuin?'Ruin (MC)':'Lot-capped',(hasRuin?hi.ruin:hi.capPct)+'%',hasRuin&&hi.ruin===0?'pos':''],['Risk/unit',hi.riskPct+'%','']].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
+    document.getElementById('targetnote').innerHTML=c.note||'<b>5% — the chosen method.</b> Monte-Carlo validated: 0% ruin across 5,000 shuffles, ~$970k median (real/capped). The fortress dial.';
   }else{hi=c.trials.find(t=>t.tag==='target')||c.trials[0];
     document.getElementById('targetkpis').innerHTML=[['PF',fmt(hi.pf,2),hi.pf>=1?'pos':'neg'],['Win',hi.win+'%',hi.win>=50?'pos':''],['Months +',hi.monthsGreen+'/'+hi.monthsTotal,''],['Max DD',hi.dd+'%','neg']].map(k=>'<div class="kpi"><div class="v '+k[2]+'">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('');
     document.getElementById('targetnote').textContent='"'+hi.label+'" — the same master signals entered on time, spread included. The number the 1m executor must recover.';
